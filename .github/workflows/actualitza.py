@@ -153,14 +153,14 @@ def planifica(paquet: Path, repo: Path):
             ignorats.append(cami)
         elif desti.is_file():
             (retirar if resum(desti) == h else ignorats).append(cami)
-    es_retira = {clau(c) for c in retirar}
+    es_retira = set(retirar)  # camins exactes: una variant de majúscules d'un fitxer teu no s'hi confon
 
     existents = llegeix_repo(repo)
     carpetes = {}
     for k, camins in existents.items():
         for pare in PurePosixPath(k).parents:
             if str(pare) != ".":
-                carpetes.setdefault(str(pare), []).append(k)
+                carpetes.setdefault(str(pare), []).extend(camins)
 
     topades = []
     for cami in nous:
@@ -169,17 +169,17 @@ def planifica(paquet: Path, repo: Path):
         k = clau(cami)
         # Un fitxer amb el mateix nom (o només amb majúscules diferents).
         for altre in existents.get(k, []):
-            if altre in es_retira or clau(altre) in es_retira:
+            if altre in es_retira:
                 continue
-            if altre == cami and (cami in vells or resum(repo / cami) == nous[cami]):
-                continue  # és del sistema, o és idèntic al del paquet: s'adopta
+            if altre == cami and (cami in vells or (not vells and resum(repo / cami) == nous[cami])):
+                continue  # és del sistema, o (només a la primera instal·lació) és idèntic al del paquet
             topades.append(cami)
         # Una carpeta on el paquet necessita un fitxer.
         if any(f not in es_retira for f in carpetes.get(k, [])):
             topades.append(cami)
         # Un fitxer on el paquet necessita una carpeta.
         for pare in PurePosixPath(k).parents:
-            if str(pare) != "." and str(pare) in existents and str(pare) not in es_retira:
+            if str(pare) != "." and any(c not in es_retira for c in existents.get(str(pare), [])):
                 topades.append(cami)
     if topades:
         topades = sorted(set(topades))
