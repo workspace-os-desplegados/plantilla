@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """L'actualitzador del Workspace OS al perfil mòbil (bloc 21 §5, sessió 16).
 
-    python3 .github/wos/actualitza.py <paquet> <repositori> [--origen <commit>]
+    python3 .github/workflows/actualitza.py <paquet> <repositori> [--origen <commit>]
 
 Porta al repositori de la persona el paquet del seu intermedi, per manifest:
 
@@ -16,8 +16,9 @@ Porta al repositori de la persona el paquet del seu intermedi, per manifest:
 podria llegir el cervell i enviar-lo fora.
 
 ⛔ Hi ha camins que no toca mai, digui el que digui el manifest o el paquet (`PROTEGITS`).
-Aquest fitxer viu a `.github/`, que és un d'ells: el paquet no el pot reescriure, i només
-canvia si la persona ho accepta.
+Aquest fitxer viu a `.github/workflows/`, i té dues guardes independents: `.github/` és a
+`PROTEGITS`, i GitHub mateix rebutja que el testimoni d'un workflow escrigui res dins de
+`.github/workflows/` (comprovat el 03-10, sessió 16 tram 1). Només canvia si la persona ho accepta.
 
 Tot es comprova abans d'escriure: o s'aplica sencer, o no s'aplica res.
 """

@@ -3,7 +3,7 @@
 # Cada matí baixa el paquet del teu intermedi i el porta a aquest repositori. Només toca el que és
 # del sistema (la llista és a .wos/manifest.json). No toca mai el teu cervell, el context, la veu,
 # work/, archives/ ni les teves skills, i no executa res del que baixa: el codi que corre és el
-# d'aquest fitxer i el de .github/wos/actualitza.py, que són teus i només canvien si tu ho acceptes.
+# d'aquest fitxer i el de .github/workflows/actualitza.py, que són teus i només canvien si tu ho acceptes.
 #
 # Necessita, a Settings → Secrets and variables → Actions:
 #   · el secret WOS_CLAU: la clau de només lectura del teu intermedi;
@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
 
       - name: Aplica el paquet
-        run: python3 repo/.github/wos/actualitza.py paquet repo --origen "$(git -C paquet rev-parse HEAD)"
+        run: python3 repo/.github/workflows/actualitza.py paquet repo --origen "$(git -C paquet rev-parse HEAD)"
 
       - name: Desa-ho
         working-directory: repo

@@ -12,7 +12,7 @@ Cada matí, `.github/workflows/actualitza.yml` baixa del teu intermedi la versi�
 - **No toca mai el que és teu**: `brain/` (llevat de `brain/transversal/`, si en tens), `context.md`,
   `voice.md`, `work/`, `archives/`, les teves skills i `.github/`.
 - **No executa res del que baixa.** Només copia fitxers. El codi que corre és el d'aquest repositori
-  (`.github/workflows/actualitza.yml` i `.github/wos/actualitza.py`), i el pots llegir sencer.
+  (`.github/workflows/actualitza.yml` i `.github/workflows/actualitza.py`), i el pots llegir sencer.
 - **Si una skill nova es diu igual que una de teva, s'atura** sense tocar res i t'ho diu.
 - **No es canvia a si mateix.** Si mai cal una versió nova de l'actualitzador, te la proposaran i
   l'acceptes tu.
