@@ -15,8 +15,8 @@ Porta al repositori de la persona el paquet del seu intermedi, per manifest:
 ⛔ Només copia i esborra fitxers: no executa mai res del paquet. Si ho fes, el que arriba
 podria llegir el cervell i enviar-lo fora.
 
-⛔ Hi ha camins que no toca mai, digui el que digui el manifest o el paquet (`PROTEGITS`),
-comparats sense distingir majúscules.
+⛔ Només escriu on és del sistema (`PERMESOS_*`), i hi ha camins que no toca mai, digui el que digui
+el manifest o el paquet (`PROTEGITS_*`). Tots dos es comparen sense distingir majúscules.
 Aquest fitxer viu a `.github/workflows/`, i té dues guardes independents: `.github/` és a
 `PROTEGITS`, i GitHub mateix rebutja que el testimoni d'un workflow escrigui res dins de
 `.github/workflows/` (comprovat el 03-10, sessió 16 tram 1). Només canvia si la persona ho accepta.
@@ -36,8 +36,9 @@ MANIFEST = ".wos/manifest.json"
 
 # Camins de la persona, comparats sense distingir majúscules (en un Mac o un iPad, `Brain/` i
 # `brain/` són la mateixa carpeta). Dins de brain/, tot menys brain/transversal/.
-PROTEGITS_ARRELS = {".wos", "work", "archives", ".devcontainer", ".vscode"}
-PROTEGITS_FITXERS = {"context.md", "voice.md"}
+# Els mateixos que el sistema declara de la persona (`sistema/.gitignore`), més els de l'entorn.
+PROTEGITS_ARRELS = {".wos", "work", "wos-work", "archives", "reunions", ".devcontainer", ".vscode"}
+PROTEGITS_FITXERS = {"context.md", "voice.md", "intake.md", "notes.json", ".novetats-vistes"}
 
 
 class Atura(Exception):
@@ -60,9 +61,32 @@ def protegit(cami: str) -> bool:
     # La configuració de Claude Code pot executar ordres (hooks): no la porta el paquet.
     if parts[0] == ".claude" and len(parts) == 2 and parts[1].startswith("settings"):
         return True
+    # Les skills que es fa la persona porten el prefix personal- (el catàleg no en publica mai cap).
+    if parts[:2] == (".claude", "skills") and len(parts) > 2 and parts[2].startswith("personal-"):
+        return True
     if parts[0] == "brain":
         return not (len(parts) > 2 and parts[1] == "transversal")
     return False
+
+
+# El que el paquet POT escriure (llista blanca, comparada sense majúscules). Tota la resta s'atura:
+# així un fitxer nou que Claude Code o git interpretin (`.mcp.json`, per exemple) no pot arribar sense
+# que la persona accepti abans un actualitzador nou.
+PERMESOS_FITXERS = {"claude.md", "novetats.md", ".sistema.json", ".cataleg.json", ".skills.json", ".guia.html"}
+PERMESOS_CARPETES = {"rules", "bin", "disseny"}
+
+
+def permes(cami: str) -> bool:
+    parts = PurePosixPath(clau(cami)).parts
+    if protegit(cami) or not parts:
+        return False
+    if len(parts) == 1:
+        return parts[0] in PERMESOS_FITXERS
+    if parts[0] in PERMESOS_CARPETES:
+        return True
+    if parts[:2] == (".claude", "skills") and len(parts) > 3:
+        return True
+    return parts[:2] == ("brain", "transversal") and len(parts) > 2
 
 
 def valid(cami: str) -> bool:
@@ -138,6 +162,8 @@ def planifica(paquet: Path, repo: Path):
             raise Atura(f"El paquet porta un camí no vàlid ({cami}): no s'aplica.")
         if protegit(cami):
             raise Atura(f"El paquet vol escriure a {cami}, que és teu: no s'aplica res.")
+        if not permes(cami):
+            raise Atura(f"El paquet porta {cami}, que no és cap lloc del sistema: no s'aplica res.")
         if clau(cami) in vistos:
             raise Atura(f"El paquet porta {vistos[clau(cami)]} i {cami}, que només es distingeixen per "
                         "les majúscules: no s'aplica.")
@@ -149,7 +175,7 @@ def planifica(paquet: Path, repo: Path):
         if cami in nous:
             continue
         desti = repo / cami
-        if not valid(cami) or protegit(cami) or passa_per_enllac(repo, cami):
+        if not valid(cami) or not permes(cami) or passa_per_enllac(repo, cami):
             ignorats.append(cami)
         elif desti.is_file():
             (retirar if resum(desti) == h else ignorats).append(cami)
