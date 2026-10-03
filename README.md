@@ -10,7 +10,9 @@ Cada matí, `.github/workflows/actualitza.yml` baixa del teu intermedi la versi�
 
 - **Només toca el que és del sistema.** La llista és a `.wos/manifest.json`.
 - **No toca mai el que és teu**: `brain/` (llevat de `brain/transversal/`, si en tens), `context.md`,
-  `voice.md`, `work/`, `archives/`, les teves skills i `.github/`.
+  `voice.md`, `work/`, `archives/`, les teves skills, `.github/`, la configuració de Claude Code
+  (`.claude/settings*.json`) i els fitxers que git interpreta (`.gitignore`, `.gitattributes`...).
+  Escrits amb majúscules o sense, és igual.
 - **No executa res del que baixa.** Només copia fitxers. El codi que corre és el d'aquest repositori
   (`.github/workflows/actualitza.yml` i `.github/workflows/actualitza.py`), i el pots llegir sencer.
 - **Si una skill nova es diu igual que una de teva, s'atura** sense tocar res i t'ho diu.

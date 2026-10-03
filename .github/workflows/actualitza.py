@@ -15,7 +15,8 @@ Porta al repositori de la persona el paquet del seu intermedi, per manifest:
 ⛔ Només copia i esborra fitxers: no executa mai res del paquet. Si ho fes, el que arriba
 podria llegir el cervell i enviar-lo fora.
 
-⛔ Hi ha camins que no toca mai, digui el que digui el manifest o el paquet (`PROTEGITS`).
+⛔ Hi ha camins que no toca mai, digui el que digui el manifest o el paquet (`PROTEGITS`),
+comparats sense distingir majúscules.
 Aquest fitxer viu a `.github/workflows/`, i té dues guardes independents: `.github/` és a
 `PROTEGITS`, i GitHub mateix rebutja que el testimoni d'un workflow escrigui res dins de
 `.github/workflows/` (comprovat el 03-10, sessió 16 tram 1). Només canvia si la persona ho accepta.
@@ -28,12 +29,14 @@ import json
 import os
 import shutil
 import sys
+import unicodedata
 from pathlib import Path, PurePosixPath
 
 MANIFEST = ".wos/manifest.json"
 
-# Camins de la persona. Arrels senceres, i dins de brain/ tot menys brain/transversal/.
-PROTEGITS_ARRELS = {".git", ".github", ".wos", "work", "archives"}
+# Camins de la persona, comparats sense distingir majúscules (en un Mac o un iPad, `Brain/` i
+# `brain/` són la mateixa carpeta). Dins de brain/, tot menys brain/transversal/.
+PROTEGITS_ARRELS = {".wos", "work", "archives", ".devcontainer", ".vscode"}
 PROTEGITS_FITXERS = {"context.md", "voice.md"}
 
 
@@ -41,11 +44,21 @@ class Atura(Exception):
     """Una condició per la qual no s'ha d'aplicar res."""
 
 
+def clau(cami: str) -> str:
+    return unicodedata.normalize("NFC", cami).casefold()
+
+
 def protegit(cami: str) -> bool:
-    parts = PurePosixPath(cami).parts
+    parts = PurePosixPath(clau(cami)).parts
     if not parts:
         return True
-    if parts[0] in PROTEGITS_ARRELS or cami in PROTEGITS_FITXERS:
+    # .git, .github, .gitignore, .gitattributes, .gitmodules...: git els interpreta, a qualsevol nivell.
+    if any(p.startswith(".git") for p in parts):
+        return True
+    if parts[0] in PROTEGITS_ARRELS or "/".join(parts) in PROTEGITS_FITXERS:
+        return True
+    # La configuració de Claude Code pot executar ordres (hooks): no la porta el paquet.
+    if parts[0] == ".claude" and len(parts) == 2 and parts[1].startswith("settings"):
         return True
     if parts[0] == "brain":
         return not (len(parts) > 2 and parts[1] == "transversal")
@@ -84,9 +97,26 @@ def llegeix_manifest(repo: Path) -> dict:
     if not m.exists():
         return {}
     try:
-        return dict(json.loads(m.read_text(encoding="utf-8")).get("fitxers", {}))
+        fitxers = json.loads(m.read_text(encoding="utf-8")).get("fitxers", {})
     except (ValueError, AttributeError):
+        fitxers = None
+    if not isinstance(fitxers, dict) or not all(isinstance(k, str) and isinstance(v, str)
+                                                for k, v in fitxers.items()):
         raise Atura(f"{MANIFEST} no es pot llegir: no s'aplica res.")
+    return dict(fitxers)
+
+
+def llegeix_repo(repo: Path) -> dict:
+    """Els fitxers que hi ha al repositori (sense .git/), indexats per `clau`."""
+    fitxers = {}
+    for arrel, dirs, noms in os.walk(repo):
+        rel_arrel = Path(arrel).relative_to(repo)
+        if rel_arrel == Path("."):
+            dirs[:] = [d for d in dirs if d != ".git"]
+        for nom in noms:
+            cami = (rel_arrel / nom).as_posix()
+            fitxers.setdefault(clau(cami), []).append(cami)
+    return fitxers
 
 
 def passa_per_enllac(repo: Path, cami: str) -> bool:
@@ -102,82 +132,96 @@ def planifica(paquet: Path, repo: Path):
     nous = llegeix_paquet(paquet)
     vells = llegeix_manifest(repo)
 
+    vistos = {}
     for cami in nous:
         if not valid(cami):
             raise Atura(f"El paquet porta un camí no vàlid ({cami}): no s'aplica.")
         if protegit(cami):
             raise Atura(f"El paquet vol escriure a {cami}, que és teu: no s'aplica res.")
+        if clau(cami) in vistos:
+            raise Atura(f"El paquet porta {vistos[clau(cami)]} i {cami}, que només es distingeixen per "
+                        "les majúscules: no s'aplica.")
+        vistos[clau(cami)] = cami
+
+    # Què es retira: el que era del sistema, ja no és al paquet i és tal com el va deixar l'actualitzador.
+    retirar, ignorats = [], []
+    for cami, h in vells.items():
+        if cami in nous:
+            continue
+        desti = repo / cami
+        if not valid(cami) or protegit(cami) or passa_per_enllac(repo, cami):
+            ignorats.append(cami)
+        elif desti.is_file():
+            (retirar if resum(desti) == h else ignorats).append(cami)
+    es_retira = {clau(c) for c in retirar}
+
+    existents = llegeix_repo(repo)
+    carpetes = {}
+    for k, camins in existents.items():
+        for pare in PurePosixPath(k).parents:
+            if str(pare) != ".":
+                carpetes.setdefault(str(pare), []).append(k)
 
     topades = []
     for cami in nous:
         if passa_per_enllac(repo, cami):
             raise Atura(f"{cami} passa per un enllaç simbòlic del teu repositori: no s'aplica res.")
-        desti = repo / cami
-        if cami not in vells and (desti.exists() or desti.is_symlink()):
+        k = clau(cami)
+        # Un fitxer amb el mateix nom (o només amb majúscules diferents).
+        for altre in existents.get(k, []):
+            if altre in es_retira or clau(altre) in es_retira:
+                continue
+            if altre == cami and (cami in vells or resum(repo / cami) == nous[cami]):
+                continue  # és del sistema, o és idèntic al del paquet: s'adopta
             topades.append(cami)
-        elif desti.is_dir():
+        # Una carpeta on el paquet necessita un fitxer.
+        if any(f not in es_retira for f in carpetes.get(k, [])):
             topades.append(cami)
-        else:
-            # Un fitxer teu on el paquet necessita una carpeta.
-            pare = desti.parent
-            while pare != repo:
-                if pare.is_file():
-                    topades.append(cami)
-                    break
-                pare = pare.parent
+        # Un fitxer on el paquet necessita una carpeta.
+        for pare in PurePosixPath(k).parents:
+            if str(pare) != "." and str(pare) in existents and str(pare) not in es_retira:
+                topades.append(cami)
     if topades:
+        topades = sorted(set(topades))
         skills = sorted({PurePosixPath(c).parts[2] for c in topades
                          if c.startswith(".claude/skills/") and len(PurePosixPath(c).parts) > 3})
         linies = ["No s'ha aplicat l'actualització: el paquet porta coses que ja tens i que són teves."]
         if skills:
-            linies.append("Skills del catàleg amb el mateix nom que una de teva: " + ", ".join(skills) + ".")
-        linies.append("Fitxers: " + ", ".join(sorted(topades)) + ".")
-        linies.append("No s'ha tocat res. Canvia el nom de la teva o avisa qui t'ha instal·lat el Workspace OS.")
+            linies.append("Skills del catàleg amb el mateix nom que una de teva: " + ", ".join(skills)
+                          + ". Canvia el nom de la teva.")
+        linies.append("Fitxers: " + ", ".join(topades) + ".")
+        linies.append("No s'ha tocat res. Si no saps què fer, avisa qui t'ha instal·lat el Workspace OS.")
         raise Atura("\n".join(linies))
-
-    retirar, ignorats = [], []
-    for cami in vells:
-        if cami in nous:
-            continue
-        if not valid(cami) or protegit(cami):
-            ignorats.append(cami)
-        else:
-            retirar.append(cami)
     return nous, vells, retirar, ignorats
 
 
 def aplica(paquet: Path, repo: Path, origen: str = "") -> dict:
     nous, vells, retirar, ignorats = planifica(paquet, repo)
-    informe = {"nous": [], "canviats": [], "retirats": [], "ignorats": ignorats}
+    informe = {"nous": [], "canviats": [], "desfets": [], "retirats": [], "ignorats": ignorats}
+
+    # Primer es retira: així un fitxer del sistema que passa a ser carpeta (o al revés) no fa nosa.
+    for cami in sorted(retirar):
+        desti = repo / cami
+        desti.unlink()
+        informe["retirats"].append(cami)
+        pare = desti.parent
+        while pare != repo and pare.is_dir() and not any(pare.iterdir()):
+            pare.rmdir()
+            pare = pare.parent
 
     for cami, h in sorted(nous.items()):
         desti = repo / cami
         if desti.exists():
-            if resum(desti) == h:
+            ara = resum(desti)
+            if ara == h:
                 continue
-            informe["canviats"].append(cami)
+            # Un fitxer del sistema que la persona havia canviat: torna a ser el del sistema, i es diu.
+            informe["desfets" if cami in vells and ara != vells[cami] else "canviats"].append(cami)
         else:
             informe["nous"].append(cami)
         desti.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(paquet / cami, desti)
         os.chmod(desti, 0o755 if os.access(paquet / cami, os.X_OK) else 0o644)
-
-    for cami in sorted(retirar):
-        desti = repo / cami
-        if passa_per_enllac(repo, cami):
-            informe["ignorats"].append(cami)
-            continue
-        if desti.is_file():
-            # Només s'esborra si és tal com el va deixar l'actualitzador: si no, ja no és del sistema.
-            if resum(desti) != vells[cami]:
-                informe["ignorats"].append(cami)
-                continue
-            desti.unlink()
-            informe["retirats"].append(cami)
-        pare = desti.parent
-        while pare != repo and pare.is_dir() and not any(pare.iterdir()):
-            pare.rmdir()
-            pare = pare.parent
 
     m = repo / MANIFEST
     m.parent.mkdir(parents=True, exist_ok=True)
@@ -198,9 +242,11 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 2
     print(f"Nous: {len(inf['nous'])} · canviats: {len(inf['canviats'])} · retirats: {len(inf['retirats'])}")
-    for clau in ("nous", "canviats", "retirats"):
-        for cami in inf[clau]:
-            print(f"  {clau}: {cami}")
+    for tipus in ("nous", "canviats", "retirats"):
+        for cami in inf[tipus]:
+            print(f"  {tipus}: {cami}")
+    for cami in inf["desfets"]:
+        print(f"  l'havies canviat i torna a ser el del sistema: {cami}")
     for cami in inf["ignorats"]:
         print(f"  no tocat: {cami}")
     return 0
