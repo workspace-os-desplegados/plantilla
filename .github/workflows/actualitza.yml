@@ -1,0 +1,58 @@
+# L'actualitzador del Workspace OS.
+#
+# Cada matí baixa el paquet del teu intermedi i el porta a aquest repositori. Només toca el que és
+# del sistema (la llista és a .wos/manifest.json). No toca mai el teu cervell, el context, la veu,
+# work/, archives/ ni les teves skills, i no executa res del que baixa: el codi que corre és el
+# d'aquest fitxer i el de .github/wos/actualitza.py, que són teus i només canvien si tu ho acceptes.
+#
+# Necessita, a Settings → Secrets and variables → Actions:
+#   · el secret WOS_CLAU: la clau de només lectura del teu intermedi;
+#   · la variable WOS_INSTALLACIO: el nom de la teva instal·lació.
+
+name: Actualitza
+
+on:
+  schedule:
+    - cron: "0 5 * * *"   # cada dia a les 5:00 UTC (les 7:00 a l'estiu a Andorra, les 6:00 a l'hivern)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: actualitza
+  cancel-in-progress: false
+
+jobs:
+  actualitza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: El teu repositori
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: repo
+
+      - name: El paquet del teu intermedi (només lectura)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: workspace-os-desplegados/${{ vars.WOS_INSTALLACIO }}
+          ssh-key: ${{ secrets.WOS_CLAU }}
+          path: paquet
+          persist-credentials: false
+
+      - name: Aplica el paquet
+        run: python3 repo/.github/wos/actualitza.py paquet repo --origen "$(git -C paquet rev-parse HEAD)"
+
+      - name: Desa-ho
+        working-directory: repo
+        run: |
+          git config user.name "Workspace OS"
+          git config user.email "workspace-os@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Res de nou."
+            exit 0
+          fi
+          git commit -q -m "Actualització del Workspace OS"
+          git push || { git pull --rebase -q && git push; }
