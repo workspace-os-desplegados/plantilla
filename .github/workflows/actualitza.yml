@@ -16,6 +16,9 @@ on:
   schedule:
     - cron: "0 5 * * *"   # cada dia a les 5:00 UTC (les 7:00 a l'estiu a Andorra, les 6:00 a l'hivern)
   workflow_dispatch:
+  push:                    # «actualitza ara» des de la conversa: Claude puja aquesta marca i s'engega
+    branches: [main]
+    paths: [".wos/actualitza-ara"]
 
 permissions:
   contents: write
