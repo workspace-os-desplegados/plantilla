@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""L'actualitzador del Workspace OS al perfil mòbil (bloc 21 §5, sessió 16).
+"""L'actualitzador del Workspace OS al perfil individual (bloc 21 §5; sessió 16, i sessió 17 tram 4).
 
-    python3 .github/workflows/actualitza.py <paquet> <repositori> [--origen <commit>]
+    python3 .wos/actualitzador/actualitza.py <paquet> <repositori> [--origen <commit>]
+    python3 .wos/actualitzador/actualitza.py --proposa <paquet> <repositori>
 
 Porta al repositori de la persona el paquet del seu intermedi, per manifest:
 
@@ -17,9 +18,12 @@ podria llegir el cervell i enviar-lo fora.
 
 ⛔ Només escriu on és del sistema (`PERMESOS_*`), i hi ha camins que no toca mai, digui el que digui
 el manifest o el paquet (`PROTEGITS_*`). Tots dos es comparen sense distingir majúscules.
-Aquest fitxer viu a `.github/workflows/`, i té dues guardes independents: `.github/` és a
-`PROTEGITS`, i GitHub mateix rebutja que el testimoni d'un workflow escrigui res dins de
-`.github/workflows/` (comprovat el 03-10, sessió 16 tram 1). Només canvia si la persona ho accepta.
+Aquest fitxer viu a `.wos/actualitzador/`, que és a `PROTEGITS`: el paquet no l'hi pot escriure mai.
+
+**Un actualitzador nou només arriba amb el sí de la persona** (`--proposa`). El paquet en porta l'última versió a
+`.wos/actualitzador/` (el pas d'aplicar no la llegeix mai). Si és més nova que la d'aquí, es deixa en una branca
+`actualitzador-v<N>` i s'obre una proposta (o un avís, si GitHub no deixa obrir-ne) amb el que canvia. Fins que la
+persona l'accepta, continua corrent aquesta; i la branca no s'executa mai.
 
 Tot es comprova abans d'escriure: o s'aplica sencer, o no s'aplica res.
 """
@@ -256,12 +260,108 @@ def aplica(paquet: Path, repo: Path, origen: str = "") -> dict:
     return informe
 
 
+ACTUALITZADOR = ".wos/actualitzador"
+FITXERS_ACTUALITZADOR = {"actualitza.py", "actualitza.yml", "VERSIO", "CANVIS.md"}
+WORKFLOW = ".github/workflows/actualitza.yml"
+
+
+def versio(carpeta: Path) -> int:
+    try:
+        return int((carpeta / "VERSIO").read_text().strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def git(repo: Path, *args, check=True):
+    import subprocess
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+    if check and r.returncode != 0:
+        raise Atura(f"git {args[0]} ha fallat: {(r.stderr or r.stdout).strip()}")
+    return r.stdout.strip()
+
+
+def proposa(paquet: Path, repo: Path) -> str:
+    """Si el paquet porta un actualitzador més nou, el deixa en una branca i en fa una proposta. No el fa
+    servir mai: només corre quan la persona l'ha acceptat i ja és a `main`."""
+    import subprocess
+    nou, local = paquet / ACTUALITZADOR, repo / ACTUALITZADOR
+    vn, vl = versio(nou), versio(local)
+    if vn <= vl:
+        return f"L'actualitzador és al dia (versió {vl})."
+    for c in (paquet / ".wos", nou):
+        if c.is_symlink():
+            raise Atura(f"El paquet porta un enllaç simbòlic ({c.relative_to(paquet)}): no es proposa res.")
+    fitxers = sorted(f.name for f in nou.iterdir())
+    if set(fitxers) - FITXERS_ACTUALITZADOR or any((nou / f).is_symlink() or not (nou / f).is_file() for f in fitxers):
+        raise Atura(f"L'actualitzador nou porta coses que no toquen ({', '.join(fitxers)}): no es proposa.")
+    # El que diu el paquet de la versió nova es llegeix abans de crear res: si no es pot avisar, no es proposa.
+    try:
+        canvis = (nou / "CANVIS.md").read_text(encoding="utf-8") if (nou / "CANVIS.md").is_file() else ""
+    except UnicodeDecodeError:
+        raise Atura("El CANVIS.md de l'actualitzador nou no és text: no es proposa.")
+    if len(canvis) > 20000:
+        raise Atura("El CANVIS.md de l'actualitzador nou és massa llarg: no es proposa.")
+    branca = f"actualitzador-v{vn}"
+    if git(repo, "ls-remote", "--heads", "origin", branca):
+        return f"L'actualitzador {vn} ja està proposat (branca {branca}): espera el teu sí."
+    base = git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    git(repo, "switch", "-q", "-c", branca)
+    try:
+        local.mkdir(parents=True, exist_ok=True)
+        for f in fitxers:
+            shutil.copyfile(nou / f, local / f)
+        git(repo, "add", "--", ACTUALITZADOR)
+        git(repo, "commit", "-q", "-m", f"Actualitzador nou (versió {vn})")
+        git(repo, "push", "-q", "origin", branca)
+    finally:
+        git(repo, "switch", "-q", base, check=False)
+    yml_nou = nou / "actualitza.yml"
+    cal_yml = yml_nou.is_file() and (not (repo / WORKFLOW).is_file()
+                                      or resum(yml_nou) != resum(repo / WORKFLOW))
+    servidor = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    nom_repo = os.environ.get("GITHUB_REPOSITORY", "")
+    enllac = f"{servidor}/{nom_repo}/compare/{base}...{branca}?expand=1"
+    # El text de qui publica va dins d'un bloc de codi: sense enllaços ni format que es facin passar pel sistema.
+    tanca = "````"
+    while tanca in canvis:
+        tanca += "`"
+    cos = (f"Hi ha una versió nova de l'actualitzador del Workspace OS (la {vn}; ara tens la {vl}).\n\n"
+           f"Què hi diu qui t'ha instal·lat el Workspace OS:\n\n{tanca}text\n{canvis.strip()}\n{tanca}\n\n"
+           "**No s'aplica fins que tu ho acceptes.** Pots llegir exactament què canvia a la pestanya "
+           "«Files changed». Per acceptar-la, fes *Merge*. Si no, tanca-la: res no canvia.\n")
+    if cal_yml:
+        cos += (f"\n⚠️ Aquesta versió també canvia `{WORKFLOW}`, que GitHub no deixa canviar sol. Després del "
+                f"*Merge*, copia-hi el contingut de `{ACTUALITZADOR}/actualitza.yml` (o demana-ho a qui t'ha "
+                "instal·lat el Workspace OS).\n")
+    titol = f"Actualitzador nou del Workspace OS (versió {vn})"
+    pr = subprocess.run(["gh", "pr", "create", "--base", base, "--head", branca, "--title", titol, "--body", cos],
+                        cwd=repo, capture_output=True, text=True)
+    if pr.returncode == 0:
+        return f"Proposta oberta: {pr.stdout.strip()}"
+    cos_avis = cos.replace("Per acceptar-la, fes *Merge*.",
+                           f"Per acceptar-la: obre {enllac}, *Create pull request* i després *Merge*.")
+    av = subprocess.run(["gh", "issue", "create", "--title", titol, "--body", cos_avis],
+                        cwd=repo, capture_output=True, text=True)
+    if av.returncode != 0:
+        git(repo, "push", "-q", "origin", "--delete", branca, check=False)   # demà ho tornarà a provar
+        raise Atura(f"No s'ha pogut avisar de l'actualitzador nou ({branca}): {(av.stderr or pr.stderr).strip()}")
+    return f"Avís obert: {av.stdout.strip()}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Actualitza el Workspace OS des del paquet de l'intermedi.")
     ap.add_argument("paquet")
     ap.add_argument("repositori")
     ap.add_argument("--origen", default="")
+    ap.add_argument("--proposa", action="store_true", help="proposa l'actualitzador nou, si n'hi ha, sense aplicar-lo")
     a = ap.parse_args()
+    if a.proposa:
+        try:
+            print(proposa(Path(a.paquet).resolve(), Path(a.repositori).resolve()))
+        except Atura as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        return 0
     try:
         inf = aplica(Path(a.paquet).resolve(), Path(a.repositori).resolve(), a.origen)
     except Atura as e:
