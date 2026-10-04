@@ -288,6 +288,12 @@ def proposa(paquet: Path, repo: Path) -> str:
     vn, vl = versio(nou), versio(local)
     if vn <= vl:
         return f"L'actualitzador és al dia (versió {vl})."
+    try:   # la persona hi pot haver dit que no (menú → 9): no se li torna a proposar la mateixa
+        rebutjada = int((local / "REBUTJADA").read_text().strip())
+    except (OSError, ValueError):
+        rebutjada = 0
+    if vn <= rebutjada:
+        return f"La versió {vn} de l'actualitzador la vas rebutjar: no es torna a proposar."
     for c in (paquet / ".wos", nou):
         if c.is_symlink():
             raise Atura(f"El paquet porta un enllaç simbòlic ({c.relative_to(paquet)}): no es proposa res.")

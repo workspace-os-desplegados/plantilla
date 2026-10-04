@@ -39,10 +39,24 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           path: repo
 
+      - name: Comprova la configuració
+        env:
+          INSTALLACIO: ${{ vars.WOS_INSTALLACIO || secrets.WOS_INSTALLACIO }}
+          CLAU: ${{ secrets.WOS_CLAU != '' }}
+        run: |
+          if [ -z "$INSTALLACIO" ]; then
+            echo "::error::Falta el nom de la instal·lació: a Settings → Secrets and variables → Actions, pestanya Variables, crea WOS_INSTALLACIO amb el nom que t'han donat."
+            exit 1
+          fi
+          if [ "$CLAU" != "true" ]; then
+            echo "::error::Falta la clau: a Settings → Secrets and variables → Actions, pestanya Secrets, crea WOS_CLAU i enganxa-hi la clau que t'han donat."
+            exit 1
+          fi
+
       - name: El paquet del teu intermedi (només lectura)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          repository: workspace-os-desplegados/${{ vars.WOS_INSTALLACIO }}
+          repository: workspace-os-desplegados/${{ vars.WOS_INSTALLACIO || secrets.WOS_INSTALLACIO }}
           ssh-key: ${{ secrets.WOS_CLAU }}
           path: paquet
           persist-credentials: false
