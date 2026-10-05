@@ -19,6 +19,16 @@ Cada matí, `.github/workflows/actualitza.yml` baixa del teu intermedi la versi�
 - **No es canvia a si mateix.** Quan hi ha una versió nova de l'actualitzador, te la deixa en una branca a
   part i t'avisa (a *Pull requests* o a *Issues*) amb el que canvia. Només s'aplica si fas *Merge*.
 
+## La teva feina, sempre a `main`
+
+Cada conversa amb Claude (sobretot des del mòbil o el web) treballa en una branca pròpia. Perquè el que
+hi desis arribi a la conversa següent, `.claude/settings.json` fa córrer `.wos/a-main.sh` en obrir cada
+conversa i en acabar cada resposta: posa la conversa a `main`, hi porta la feina d'aquella conversa i la que
+hagi quedat d'altres, i puja `main`. No esborra cap branca ni força res. D'una branca, només porta sol el que
+és teu (el cervell personal, els treballs, les reunions, el context); una proposta d'actualitzador, el sistema,
+les skills o res que executi codi te'ls pregunta Claude abans. El que Claude fa directament a `main` dins
+d'una conversa amb tu no passa per aquest filtre: ho veus en aquella mateixa conversa.
+
 ## Per posar-lo en marxa
 
 A Settings → Secrets and variables → Actions:

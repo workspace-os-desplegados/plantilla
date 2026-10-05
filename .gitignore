@@ -1,0 +1,4 @@
+# Del sistema operatiu i de les eines: mai es pugen
+.DS_Store
+.claude/settings.local.json
+.claude/worktrees/
