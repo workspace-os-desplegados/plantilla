@@ -23,11 +23,12 @@ Cada matí, `.github/workflows/actualitza.yml` baixa del teu intermedi la versi�
 
 Cada conversa amb Claude (sobretot des del mòbil o el web) treballa en una branca pròpia. Perquè el que
 hi desis arribi a la conversa següent, `.claude/settings.json` fa córrer `.wos/a-main.sh` en obrir cada
-conversa i en acabar cada resposta: posa la conversa a `main`, hi porta la feina d'aquella conversa i la que
-hagi quedat d'altres, i puja `main`. No esborra cap branca ni força res. D'una branca, només porta sol el que
-és teu (el cervell personal, els treballs, les reunions, el context); una proposta d'actualitzador, el sistema,
-les skills o res que executi codi te'ls pregunta Claude abans. El que Claude fa directament a `main` dins
-d'una conversa amb tu no passa per aquest filtre: ho veus en aquella mateixa conversa.
+conversa i en acabar cada resposta: sense moure la conversa de la seva branca, hi porta el que hi ha a `main`
+i la feina que hagi quedat d'altres converses, i ho puja tot a `main`. No esborra cap branca ni força res.
+D'una branca, només porta sol el que és teu (el cervell personal, els treballs, les reunions, el context);
+una proposta d'actualitzador, el sistema, les skills, esborrats o res que executi codi te'ls pregunta Claude
+abans. El que Claude fa directament a `main` dins d'una conversa amb tu no passa per aquest filtre: ho veus en
+aquella mateixa conversa.
 
 ## Per posar-lo en marxa
 
