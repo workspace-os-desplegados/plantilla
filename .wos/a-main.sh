@@ -66,6 +66,8 @@ compta_fora() {
     set -- $meta                              # :<mode abans> <mode després> <sha> <sha> <estat>
     case " ${1#:} ${2:-} " in *" 120000 "*|*" 160000 "*) n=$((n + 1)); continue ;; esac
     [ "${5:-}" = D ] && { n=$((n + 1)); continue; }
+    # Dues marques del menú que només són dades (actualitza.py i el workflow les llegeixen, no les executen).
+    case "$p" in .wos/actualitza-ara|.wos/actualitzador/REBUTJADA) continue ;; esac
     case "/$p" in
       */.git*|*/CLAUDE.md|*/CLAUDE.local.md|*/.claude/*|*/.mcp.json|*/AGENTS.md|*/.github/*) n=$((n + 1)); continue ;;
     esac
