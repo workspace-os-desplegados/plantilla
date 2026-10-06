@@ -54,12 +54,13 @@ if GIT_SSH_COMMAND="$SSH" git ls-remote "$URL" >/dev/null 2>&1; then
   echo "✓ la clau ja té accés de lectura a $REPO"
 else
   pbcopy < "$CLAU.pub"
+  open "https://github.com/$REPO/settings/keys/new" 2>/dev/null || true
   cat <<EOF
 
-  Ara, amb el compte de GitHub de la persona (la clau ja és copiada al porta-retalls):
-    1. Obre https://github.com/$REPO/settings/keys  →  «Add deploy key».
-    2. Title: «Mac (només lectura)». Key: enganxa (⌘V).
-    3. ⛔ NO marquis «Allow write access». → «Add key».
+  S'ha obert GitHub al navegador, i la clau ja és copiada. Amb el compte de la persona:
+    1. Title: «Mac (només lectura)». Key: enganxa (⌘V).
+    2. ⛔ NO marquis «Allow write access». → «Add key».
+  (Si no s'ha obert: https://github.com/$REPO/settings/keys/new)
 EOF
   for _ in 1 2 3; do
     pregunta "  Quan estigui afegida, prem Retorn… "
@@ -110,14 +111,29 @@ TMP=$(mktemp -d)
 printf 'do shell script quoted form of "%s"\n' "$ACT" > "$TMP/app.applescript"
 rm -rf "$APP"
 osacompile -o "$APP" "$TMP/app.applescript"
+# La icona: la del repositori (ve de la plantilla) o, en una instal·lació d'abans, la de la plantilla pública.
+ICONA="$CLON/.wos/mac/WOS.icns"
+[ -f "$ICONA" ] || { curl -fsSL -o "$TMP/WOS.icns" \
+  https://raw.githubusercontent.com/workspace-os-desplegados/plantilla/main/.wos/mac/WOS.icns 2>/dev/null && ICONA="$TMP/WOS.icns"; }
+if [ -f "$ICONA" ]; then
+  cp "$ICONA" "$APP/Contents/Resources/applet.icns"
+  codesign --force --deep -s - "$APP" >/dev/null 2>&1 || true   # la icona nova toca el paquet: es torna a signar
+  touch "$APP"
+fi
 rm -rf "$TMP"
+# Al Dock, si encara no hi és.
+APP_URL="file://${APP// /%20}/"
+if ! defaults read com.apple.dock persistent-apps 2>/dev/null | grep -qF "$APP_URL"; then
+  defaults write com.apple.dock persistent-apps -array-add "<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>$APP_URL</string><key>_CFURLStringType</key><integer>15</integer></dict></dict></dict>"
+  killall Dock 2>/dev/null || true
+fi
 "$ACT" >/dev/null 2>&1 || true
 echo "✓ $APP"
 
 cat <<EOF
 
-Fet. Arrossega l'app «$NOM» (és a la carpeta Aplicacions de l'usuari, ~/Applications) al Dock:
-un clic posa la carpeta al dia i l'obre. Els fitxers són de només lectura: per editar-ne un, «Desa una
+Fet. L'app «$NOM» ja és al Dock: un clic posa la carpeta al dia i l'obre. Si vols, arrossega la carpeta
+$ARREL a la barra lateral del Finder. Els fitxers són de només lectura: per editar-ne un, «Desa una
 còpia» i arrossega-la a Claude.
 
 Per treure-ho tot: esborra $ARREL, $APP i $SUPORT, i la «Deploy key» de GitHub.
