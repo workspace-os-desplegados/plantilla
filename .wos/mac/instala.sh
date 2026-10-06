@@ -1,13 +1,14 @@
 #!/bin/bash
-# El Workspace OS al Mac de la persona: una carpeta per MIRAR els seus treballs i reunions (perfil individual).
+# El Workspace OS al Mac de la persona: una carpeta per MIRAR els seus treballs (perfil individual).
 #
 #     bash instala.sh <usuari>/<repositori>
 #     (o, sense baixar res abans:)
 #     curl -fsSL https://raw.githubusercontent.com/workspace-os-desplegados/plantilla/main/.wos/mac/instala.sh | bash -s <usuari>/<repositori>
 #
 # Deixa:
-#   · ~/WOS/ amb dues carpetes, «Treballs» i «Reunions», de NOMÉS LECTURA (per editar un document, «Desa una
-#     còpia» i arrossega-la a Claude, que el desa com a versió nova);
+#   · ~/WOS: els seus treballs (`WOS-work`), de NOMÉS LECTURA (per editar un document, «Desa una còpia» i
+#     arrossega-la a Claude, que el desa com a versió nova). Les reunions es miren a Granola, i el cervell no
+#     s'ensenya: es pregunta a Claude;
 #   · l'app «WOS» a ~/Applications: un clic la posa al dia amb GitHub i obre la carpeta. No corre res sol;
 #   · una clau d'aquest Mac que NOMÉS pot llegir el repositori de la persona (una «Deploy key» sense escriptura).
 #
@@ -76,10 +77,14 @@ if [ ! -d "$CLON/.git" ]; then
   GIT_SSH_COMMAND="$SSH" git clone -q --branch main --single-branch "$URL" "$CLON"
 fi
 git -C "$CLON" config core.sshCommand "$SSH"
-mkdir -p "$ARREL" "$CLON/WOS-work" "$CLON/reunions"
-ln -sfn "$CLON/WOS-work" "$ARREL/Treballs"
-ln -sfn "$CLON/reunions" "$ARREL/Reunions"
-echo "✓ $ARREL, amb Treballs i Reunions"
+mkdir -p "$CLON/WOS-work"
+# Una instal·lació d'abans tenia ~/WOS amb dues dreceres (Treballs, Reunions): es treuen només les dreceres.
+if [ -d "$ARREL" ] && [ ! -L "$ARREL" ]; then
+  for l in Treballs Reunions; do [ -L "$ARREL/$l" ] && rm "$ARREL/$l"; done
+  rmdir "$ARREL" 2>/dev/null || atura "$ARREL ja existeix i té coses: mou-les o tria un altre nom (WOS_NOM=...)."
+fi
+ln -sfn "$CLON/WOS-work" "$ARREL"
+echo "✓ $ARREL (els teus treballs)"
 
 # L'actualitzador: el crida l'app. Només baixa; deixa els fitxers en només lectura.
 ACT="$SUPORT/actualitza.sh"
@@ -89,7 +94,7 @@ cat > "$ACT" <<EOF
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin GIT_TERMINAL_PROMPT=0
 CLON="$CLON"
 avisa() { osascript -e "display notification \"\$1\" with title \"$NOM\"" >/dev/null 2>&1 || true; }
-chmod -R u+w "\$CLON/WOS-work" "\$CLON/reunions" 2>/dev/null
+chmod -R u+w "\$CLON/WOS-work" 2>/dev/null
 if git -C "\$CLON" fetch -q origin main 2>/dev/null; then
   if git -C "\$CLON" merge -q --ff-only origin/main >/dev/null 2>&1; then
     avisa "Al dia"
@@ -100,7 +105,7 @@ if git -C "\$CLON" fetch -q origin main 2>/dev/null; then
 else
   avisa "Sense connexió: ensenyo l'última versió que tenia."
 fi
-chmod -R a-w "\$CLON/WOS-work" "\$CLON/reunions" 2>/dev/null
+chmod -R a-w "\$CLON/WOS-work" 2>/dev/null
 open "$ARREL"
 EOF
 chmod 700 "$ACT"
